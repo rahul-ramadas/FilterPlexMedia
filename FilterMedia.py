@@ -10,22 +10,32 @@ FFPROBE_COMMAND = FFPROBE + " -v quiet -print_format json -show_format -show_str
 
 
 def is_good_format(json_data):
-    if "streams" not in json_data:
+
+    # Trivially pass if streams or formats were not found. This is the case if the file is not
+    # actually a media file
+    if not all(key in json_data for key in ["streams", "format"]):
         return True
 
-    if "format" not in json_data:
+    # If this is a media file but not a video file, then pass
+    video_streams = [stream for stream in json_data["streams"] if stream["codec_type"] == "video"]
+    if not video_streams:
         return True
 
-    if not any(stream["codec_type"] == "video" for stream in json_data["streams"]):
-        return True
-
-    if any(stream["codec_type"] == "video" and stream["codec_name"] != "h264" for stream in json_data["streams"]):
+    # Video stream(s) should be H.264
+    if not all(stream["codec_name"] == "h264" for stream in video_streams):
         return False
 
-    if sum(1 for stream in json_data["streams"] if stream["codec_type"] == "audio") > 1:
+    # There should be only one audio stream
+    audio_streams = [stream for stream in json_data["streams"] if stream["codec_type"] == "audio"]
+    if len(audio_streams) != 1:
         return False
 
-    if json_data["format"]["format_name"] != "mov,mp4,m4a,3gp,3g2,mj2":
+    # Audio stream must be AC3 or AAC
+    if audio_streams[0]["codec_name"] not in ["ac3", "aac"]:
+        return False
+
+    # Container must be MP4 or MKV
+    if not json_data["format"]["format_name"] in ["mov,mp4,m4a,3gp,3g2,mj2", "matroska,webm"]:
         return False
 
     return True
